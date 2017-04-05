@@ -4,8 +4,8 @@ You can download Free mind from the official site http://freemind.sourceforge.ne
 
 ### Examples
 #### The Einstein Theory of Relativity
-* File: examples/pg11335.txt
-* Result: examples/pg11335.mm
+* File: [examples/pg11335.txt](/PlainText2MindMap/examples/pg11335.txt)
+* Result: [examples/pg11335.mm](/PlainText2MindMap/examples/pg11335.mm)
 
 ![The Einstein Theory of Relativity](/PlainText2MindMap/examples/pg11335.png)
 
