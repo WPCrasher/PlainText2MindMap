@@ -8,7 +8,7 @@ using System.Threading.Tasks;
 namespace PlainText2MindMap {
     class Program {
 
-        public static bool DEBUG = false;
+        public static bool DEBUG = true;
 
         static void Main(string[] args)
         {

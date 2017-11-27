@@ -6,12 +6,12 @@ using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 
-namespace PlainText2MindMap {
-    class MindMap {
-        static List<Word> words = new List<Word>();
+namespace PlainText2MindMap
+{
+    class MindMap
+    {
         static Dictionary<String, int> freq = new Dictionary<string, int>();
-        static Dictionary<String, List<int>> source = new Dictionary<String, List<int>>();
-        static Dictionary<String, List<String>> dicNames = new Dictionary<string, List<String>>();
+        static List<Abz> textList = new List<Abz>();
 
         public void build(string fileName)
         {
@@ -22,36 +22,30 @@ namespace PlainText2MindMap {
             foreach (var abz in Regex.Split(text, "\r\n\r\n"))
                 prepareData(abz.Replace("\r\n", " "), i++);
 
-            freq = clearObject().OrderByDescending(t => t.Value).Take(100).ToDictionary(t => t.Key, t => t.Value);
+            freq = clearObject().OrderByDescending(t => t.Value).ToDictionary(t => t.Key, t => t.Value);
 
-            List<Clust> clust = new List<Clust>();
-            foreach (var s in freq)
+            foreach (var abz in textList)
             {
-                Clust c = new Clust();
-                foreach (var t in source[s.Key]) c.sources.Add(t, 1);
-                c.words.Add(s.Key, 1);
-                clust.Add(c);
+                bool isEmpty = true;
+
+                foreach (var word in abz.words)
+                {
+                    if (!freq.ContainsKey(word.key)) continue;
+
+                    isEmpty = false;
+                    Console.Write("[" + word.name + "] ");
+                }
+
+                if (isEmpty) continue;
+
+                Console.WriteLine();
+                Console.WriteLine();
             }
-
-            clust = clustering(clust);
-            Word root = new Word
-            {
-                key = "root",
-                parent = null,
-                lev = 0,
-                name = "root"
-            };
-
-            mapping(root, clust);
-
-            string res = "<map version=\"1.0.1\">\r\n" + printMM(root, "") + "\r\n</map>";
-            
-            File.WriteAllText(Path.ChangeExtension(fileName, "mm"), res);
-            File.WriteAllText(Path.ChangeExtension(fileName, "xml"), res);
         }
 
         private static void prepareData(string text, int num)
         {
+            List<Word> words = new List<Word>();
             foreach (var sent in Regex.Split(text, "[^a-zA-Z0-9 ]"))
             {
                 if (string.IsNullOrEmpty(sent)) continue;
@@ -82,7 +76,7 @@ namespace PlainText2MindMap {
                     str = ""; swcnt = 0;
                     srcTail.Add(word);
 
-                    while (tail.Count() > 4) tail.Remove(tail[0]); //!!!
+                    while (tail.Count() > 0) tail.Remove(tail[0]); //!!!
                     tail.Add(key);
 
                     string comlpexName = "";
@@ -100,138 +94,28 @@ namespace PlainText2MindMap {
                         if (freq.ContainsKey(comlpexKey)) freq[comlpexKey]++;
                         else freq.Add(comlpexKey, 1);
 
+                        dicName = srcTail[srcTail.Count - i] + " " + dicName;
+                        dicName = dicName.Trim();
+
+                        if (!words.Where(k => k.name == dicName).Any())
+                            words.Add(new Word()
+                            {
+                                key = comlpexKey,
+                                name = dicName
+                            });
                         /*
                         if (!XWord.Contains(comlpexKey)) XWord.Add(comlpexKey);
                                     int xid = XWord.IndexOf(comlpexKey);
                                     if (!XRel[num].Contains(xid)) XRel[num].Add(xid);
                                     */
 
-                        if (!source.ContainsKey(comlpexKey)) source.Add(comlpexKey, new List<int>());
-                        if (!source[comlpexKey].Contains(num)) source[comlpexKey].Add(num);
 
-                        dicName = srcTail[srcTail.Count - i] + " " + dicName;
-                        dicName = dicName.Trim();
-                        List<string> list = new List<string>();
-                        if (!dicNames.ContainsKey(comlpexKey)) dicNames.Add(comlpexKey, list);
-                        else list = dicNames[comlpexKey];
-
-                        if (!list.Contains(dicName)) list.Add(dicName);
                         //if (!xray[num].Contains(comlpexKey)) xray[num].Add(comlpexKey);
                     }
                 }
             }
-        }
 
-        private static void mapping(Word parent, List<Clust> clust)
-        {
-            if (parent.lev > 3) return;
-
-            foreach (var c in clust)
-            {
-                if (c.words.Count <= 2) //Если осталось меньше трех элементов
-                {
-                    foreach (var a in c.words)
-                    {
-                        Word root = new Word
-                        {
-                            key = a.Key,
-                            name = dicNames[a.Key].First(),
-                            parent = parent,
-                            lev = parent.lev + 1
-                        };
-                        words.Add(root);
-                    }
-                }
-                else
-                {
-                    var sel = from w in c.words
-                              join f in freq on w.Key equals f.Key
-                              orderby f.Value descending //w.Value * 10000 + 
-                              select w.Key;
-
-
-                    Word root = new Word
-                    {
-                        key = sel.First(),
-                        name = dicNames[sel.First()].First(),
-                        parent = parent,
-                        lev = parent.lev + 1
-                    };
-                    words.Add(root);
-
-                    List<Clust> new_clust = new List<Clust>();
-                    foreach (var a in c.words)
-                    {
-                        if (a.Key == root.key) continue;
-
-                        Clust n = new Clust();
-                        foreach (var t in source[a.Key]) n.sources.Add(t, 1);
-                        n.words.Add(a.Key, 1);
-                        new_clust.Add(n);
-                    }
-
-                    new_clust = clustering(new_clust);
-                    mapping(root, new_clust);
-                }
-            }
-        }
-
-        private static List<Clust> clustering(List<Clust> clust)
-        {
-            //Кластеризация
-            int size = clust.Count();
-            int cicle = 0;
-            while (true)
-            {
-                if (cicle++ > 1000) break;
-
-                int imax = 0, jmax = 0;
-                float max = 0;
-                for (int i = 0; i < clust.Count(); i++)
-                {
-                    if (clust[i].words.Count() > Math.Max(2, size / 10)) continue;
-                    for (int j = i + 1; j < clust.Count(); j++)
-                    {
-                        if (clust[j].words.Count() > Math.Max(2, size / 10)) continue;
-
-                        var sel = from s1 in clust[i].sources
-                                  join s2 in clust[j].sources on s1.Key equals s2.Key
-                                  select s1.Value + s2.Value;
-                        float cnt = sel.Sum(t => t);
-                        cnt = cnt / (clust[i].sources.Sum(t => t.Value) + clust[j].sources.Sum(t => t.Value)) * 100;
-
-                        if (cnt > max)
-                        {
-                            max = cnt;
-                            imax = i;
-                            jmax = j;
-                        }
-                    }
-                }
-                if (max <= 10) break; // %
-
-                foreach (var c in clust[jmax].words)
-                    clust[imax].words.Add(c.Key, 1);
-                foreach (var c in clust[jmax].sources)
-                    if (clust[imax].sources.ContainsKey(c.Key))
-                        clust[imax].sources[c.Key] += c.Value;
-                    else clust[imax].sources.Add(c.Key, c.Value);
-
-                Dictionary<string, int> tmpWord = new Dictionary<string, int>();
-                foreach (var c in clust[imax].words)
-                {
-                    var sel =
-                       from s in source[c.Key]
-                       join r in clust[imax].sources on s equals r.Key
-                       select s;
-                    tmpWord[c.Key] = sel.Count();
-                }
-                foreach (var c in tmpWord) clust[imax].words[c.Key] = c.Value;
-
-                clust.Remove(clust[jmax]);
-            }
-
-            return clust;
+            textList.Add(new Abz() { num = num, words = words });
         }
 
         private static Dictionary<string, int> clearObject()
@@ -261,9 +145,6 @@ namespace PlainText2MindMap {
                         if (val < 0) continue;
                         if (forChange.ContainsKey(s.Key)) forChange[s.Key] += val;
                         else forChange.Add(s.Key, val);
-
-                        foreach (var src in source[dic.Key])
-                            if (!source[s.Key].Contains(src)) source[s.Key].Add(src);
                     }
                     forDel.Add(dic.Key);
                 }
@@ -277,25 +158,6 @@ namespace PlainText2MindMap {
             return freq;
         }
 
-        private static string printMM(Word w, string shift)
-        {
-            string child = "";
-            string key = w.name;
-            var sel = words.Where(t => t.parent == w);
-            if (w.lev == 1 && sel.Count() == 0) return "";
-
-            foreach (var s in sel)
-            {
-                var c = printMM(s, shift + "    ");
-                if (!String.IsNullOrEmpty(c)) child += c + "\r\n";
-            }
-
-            if (!string.IsNullOrEmpty(child))
-                child = shift + "\r\n" + child + shift;
-
-            return shift + String.Format("<node text=\"{0}\">{1}</node>", toSentCase(key), child);
-        }
-
         private static string toSentCase(string c)
         {
             return c[0].ToString().ToUpper() + c.Substring(1);
@@ -303,16 +165,36 @@ namespace PlainText2MindMap {
 
     }
 
-    class Word {
-        public Word parent;
+    class Word
+    {
         public string key;
-        public int lev;
         public string name;
     }
 
-    class Clust {
-        public Dictionary<String, int> words = new Dictionary<String, int>();
-        public Dictionary<int, int> sources = new Dictionary<int, int>();
+    class NSBase
+    {
+        public int lev;
     }
 
+    class Abz : NSBase
+    {
+        public int num;
+        public List<Word> words;
+
+        public Abz()
+        {
+            lev = 0;
+        }
+    }
+
+    class NS : NSBase
+    {
+        public NSBase parent;
+
+        public NS(NSBase _parent)
+        {
+            lev = parent.lev + 1;
+            parent = _parent;
+        }
+    }
 }
